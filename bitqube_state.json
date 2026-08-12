@@ -1,0 +1,12 @@
+{
+  "last_milestone_notified": 10000,
+  "history": [
+    {
+      "ts": "2026-08-12T20:45:21.726589+00:00",
+      "balance": 10756.87983293
+    }
+  ],
+  "last_prediction_sent_ts": "2026-08-12T20:45:24.979325+00:00",
+  "last_summary_ts": null,
+  "last_summary_balance": null
+}
