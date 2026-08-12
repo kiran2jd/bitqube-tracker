@@ -1,0 +1,74 @@
+name: BitQube Tracker
+
+on:
+  schedule:
+    # NOTE: GitHub Actions cron is always UTC. IST = UTC+5:30.
+    # Every 15 minutes, for milestone checks:
+    - cron: "*/15 * * * *"
+    # 8:00 AM IST  == 2:30 AM UTC  -> earnings summary
+    - cron: "30 2 * * *"
+    # 10:00 PM IST == 4:30 PM UTC  -> earnings summary
+    - cron: "30 16 * * *"
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: "Show earnings over the last N hours (default 24)"
+        required: false
+        default: "24"
+
+# So the workflow is allowed to commit the updated state file back to the repo
+permissions:
+  contents: write
+
+jobs:
+  run-tracker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Decide which mode to run
+        id: mode
+        run: |
+          # A manual click ("Run workflow" button) always gets the on-demand
+          # balance + last-N-hours-earned report, regardless of time of day.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "flag=--last24h --hours=${{ github.event.inputs.hours }}" >> "$GITHUB_OUTPUT"
+          else
+            # GitHub cron doesn't tell us which schedule fired directly, so
+            # we infer it from the current UTC time for the twice-daily
+            # summary vs. the regular 15-min milestone check.
+            HOUR_MIN=$(date -u +%H:%M)
+            if [ "$HOUR_MIN" = "02:30" ] || [ "$HOUR_MIN" = "16:30" ]; then
+              echo "flag=--summary" >> "$GITHUB_OUTPUT"
+            else
+              echo "flag=" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Run tracker
+        env:
+          BITQUBE_ADDRESS: ${{ secrets.BITQUBE_ADDRESS }}
+          BITQUBE_STATE_FILE: ${{ github.workspace }}/bitqube_state.json
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+        run: python3 bitqube_tracker.py ${{ steps.mode.outputs.flag }}
+
+      - name: Commit updated state file
+        run: |
+          git config user.name "bitqube-tracker-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add bitqube_state.json
+          git diff --staged --quiet || git commit -m "Update BitQube tracker state [skip ci]"
+          git push
