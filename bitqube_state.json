@@ -40,9 +40,13 @@
     {
       "ts": "2026-08-13T05:59:02.831488+00:00",
       "balance": 11201.89890568
+    },
+    {
+      "ts": "2026-08-13T12:57:15.044979+00:00",
+      "balance": 11653.70792676
     }
   ],
-  "last_prediction_sent_ts": "2026-08-12T20:45:24.979325+00:00",
   "last_summary_ts": null,
-  "last_summary_balance": null
+  "last_summary_balance": null,
+  "last_prediction_sent_ts": "2026-08-12T20:45:24.979325+00:00"
 }
