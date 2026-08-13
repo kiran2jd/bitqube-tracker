@@ -71,15 +71,21 @@ def fetch_balance(address: str) -> float:
 # ---------------------------------------------------------------------------
 
 def load_state() -> dict:
-    if STATE_FILE.exists():
-        return json.loads(STATE_FILE.read_text())
-    return {
+    defaults = {
         "last_milestone_notified": 0,
         "history": [],              # list of {"ts": iso8601, "balance": float}
-        "last_prediction_sent_ts": None,
         "last_summary_ts": None,
         "last_summary_balance": None,
     }
+    if STATE_FILE.exists():
+        try:
+            loaded = json.loads(STATE_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            loaded = {}
+        # Merge onto defaults so a missing/empty/partial file (e.g. the
+        # initial "{}" placeholder) never causes a KeyError later on.
+        defaults.update(loaded)
+    return defaults
 
 
 def save_state(state: dict) -> None:
@@ -192,6 +198,7 @@ def send_earnings_summary(state: dict, current_balance: float) -> None:
     now = datetime.now(timezone.utc)
     last_ts = state.get("last_summary_ts")
     last_balance = state.get("last_summary_balance")
+    prediction = predict_eta_to_target(state["history"], TARGET_COINS)
 
     if last_ts is None or last_balance is None:
         # First time this has ever run -- nothing to compare against yet.
@@ -199,7 +206,7 @@ def send_earnings_summary(state: dict, current_balance: float) -> None:
             f"Current balance: {current_balance:,.2f} BTQ.\n"
             f"This is the first summary, so there's no prior checkpoint to "
             f"compare against yet -- the next one will show coins earned "
-            f"since now."
+            f"since now.\n\n{prediction}"
         )
     else:
         earned = current_balance - last_balance
@@ -207,7 +214,7 @@ def send_earnings_summary(state: dict, current_balance: float) -> None:
         message = (
             f"Earned in the last ~{hours:.1f} hours: {earned:,.4f} BTQ\n"
             f"Balance now: {current_balance:,.2f} BTQ "
-            f"(was {last_balance:,.2f} BTQ)"
+            f"(was {last_balance:,.2f} BTQ)\n\n{prediction}"
         )
 
     alert("BitQube earnings summary", message)
@@ -299,22 +306,13 @@ def main():
         )
         state["last_milestone_notified"] = current_milestone
 
-    # --- Optional: daily prediction summary, even without a milestone ---
-    last_pred_ts = state.get("last_prediction_sent_ts")
-    should_send_prediction = force_status
-    if not should_send_prediction and last_pred_ts:
-        hours_since = (datetime.now(timezone.utc) - datetime.fromisoformat(last_pred_ts)).total_seconds() / 3600
-        should_send_prediction = hours_since >= PREDICTION_INTERVAL_HOURS
-    elif not last_pred_ts:
-        should_send_prediction = True
-
-    if should_send_prediction:
+    # --- Optional: prediction on demand only (--status), not automatic ---
+    if force_status:
         prediction = predict_eta_to_target(state["history"], TARGET_COINS)
         alert(
             "BitQube status update",
             f"Current balance: {balance:,.2f} BTQ\n\n{prediction}",
         )
-        state["last_prediction_sent_ts"] = datetime.now(timezone.utc).isoformat()
 
     # --- Twice-daily earnings summary (only runs when called with --summary) ---
     if do_summary:
@@ -341,12 +339,7 @@ if __name__ == "__main__":
 #      export TELEGRAM_CHAT_ID="987654321"
 #      export SMTP_USER="you@gmail.com"
 #      export SMTP_PASSWORD="your-16-char-app-password"
-# 3. Add cron entries (crontab -e):
-#
-#    a) Regular polling every 15 minutes, for milestone alerts:
-#       */15 * * * * source /home/kiran/.bitqube_env && /usr/bin/python3 /home/kiran/bitqube_tracker.py >> /home/kiran/bitqube_tracker.log 2>&1
-#
-#    b) Twice-daily earnings summary at 8:00 AM and 10:00 PM server time:
+# 3. Add cron entries (crontab -e) for 8:00 AM and 10:00 PM only:
 #       0 8  * * * source /home/kiran/.bitqube_env && /usr/bin/python3 /home/kiran/bitqube_tracker.py --summary >> /home/kiran/bitqube_tracker.log 2>&1
 #       0 22 * * * source /home/kiran/.bitqube_env && /usr/bin/python3 /home/kiran/bitqube_tracker.py --summary >> /home/kiran/bitqube_tracker.log 2>&1
 #
