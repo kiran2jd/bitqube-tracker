@@ -3,8 +3,6 @@ name: BitQube Tracker
 on:
   schedule:
     # NOTE: GitHub Actions cron is always UTC. IST = UTC+5:30.
-    # Every 15 minutes, for milestone checks:
-    - cron: "*/15 * * * *"
     # 8:00 AM IST  == 2:30 AM UTC  -> earnings summary
     - cron: "30 2 * * *"
     # 10:00 PM IST == 4:30 PM UTC  -> earnings summary
@@ -38,20 +36,15 @@ jobs:
       - name: Decide which mode to run
         id: mode
         run: |
-          # A manual click ("Run workflow" button) always gets the on-demand
-          # balance + last-N-hours-earned report, regardless of time of day.
+          # There are only two possible triggers now:
+          #  - workflow_dispatch (you clicked "Run workflow")   -> on-demand check
+          #  - schedule (8 AM or 10 PM IST, doesn't matter which) -> summary
+          # No more time-of-day guessing, which was unreliable because
+          # GitHub's cron can fire a few minutes late.
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "flag=--last24h --hours=${{ github.event.inputs.hours }}" >> "$GITHUB_OUTPUT"
           else
-            # GitHub cron doesn't tell us which schedule fired directly, so
-            # we infer it from the current UTC time for the twice-daily
-            # summary vs. the regular 15-min milestone check.
-            HOUR_MIN=$(date -u +%H:%M)
-            if [ "$HOUR_MIN" = "02:30" ] || [ "$HOUR_MIN" = "16:30" ]; then
-              echo "flag=--summary" >> "$GITHUB_OUTPUT"
-            else
-              echo "flag=" >> "$GITHUB_OUTPUT"
-            fi
+            echo "flag=--summary" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run tracker
