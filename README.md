@@ -5,12 +5,13 @@ https://explorer.bitqube.org, and alerts you on Telegram and/or email:
 
 - Every time your balance crosses a **10,000 BTQ milestone**
 - A **prediction** of when you'll hit **100,000 BTQ**, based on your recent growth rate
-- A **twice-daily earnings summary** (8 AM and 10 PM) — coins earned since the last summary
-- An **on-demand check** you can trigger any time — current balance + coins earned in the last N hours
+- A **twice-daily earnings summary at 8 AM and 10 PM** — coins earned since the last summary, plus the 100k prediction
+- An **on-demand check** you can trigger any time by clicking "Run workflow" — current balance + coins earned in the last N hours
 
 It runs for free on **GitHub Actions**, so no server of your own is needed
 (and your GPU mining box is never touched by this — it's just polling a
-public API).
+public API). It runs **only** at those two scheduled times plus whenever
+you manually click "Run workflow" — there's no background polling.
 
 ---
 
@@ -85,9 +86,10 @@ are pushed, GitHub runs it automatically:
 
 | Schedule | What happens |
 |---|---|
-| Every 15 minutes | Checks balance; alerts you only if you've crossed a new 10,000 BTQ milestone (includes a 100k ETA prediction) |
-| 8:00 AM IST | Sends an earnings summary: coins earned since the last summary |
+| 8:00 AM IST | Checks balance; sends an earnings summary (coins earned since last summary + 100k ETA); also alerts separately if a new 10,000 BTQ milestone was crossed |
 | 10:00 PM IST | Same, for the second half of the day |
+
+That's it — **no 15-minute polling**, only these two scheduled runs per day.
 
 ### Checking on demand
 
@@ -115,8 +117,8 @@ export TELEGRAM_BOT_TOKEN="123456:ABC-your-token"
 export TELEGRAM_CHAT_ID="987654321"
 # optional email vars: SMTP_USER, SMTP_PASSWORD, ALERT_EMAIL_TO
 
-python3 bitqube_tracker.py                    # normal check (milestones only)
 python3 bitqube_tracker.py --summary          # force an earnings summary now
+python3 bitqube_tracker.py --status           # force a prediction-only status message
 python3 bitqube_tracker.py --last24h          # on-demand: balance + last 24h earned
 python3 bitqube_tracker.py --last24h --hours=6  # on-demand with a custom window
 ```
@@ -137,3 +139,8 @@ python3 bitqube_tracker.py --last24h --hours=6  # on-demand with a custom window
   this fills in naturally after the tracker's been running a day.
 - **No GPU or paid server required** — this only makes lightweight HTTP
   calls to a public API, so it costs nothing to run.
+- **If you already have an old `bitqube_state.json` committed** from a
+  previous version of this script, delete it (or replace its contents with
+  `{}`) after updating to this version — a bug where an empty/placeholder
+  state file crashed the script silently on the very first scheduled run
+  was fixed in this update, so a fresh start avoids any leftover odd state.
